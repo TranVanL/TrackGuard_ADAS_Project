@@ -1,0 +1,119 @@
+Day1 - Output: 
+1.  KITTI Tracking là dữ liệu gì? 
+- Dữ liệu ghi lại từ 1 xe đang chạy . Bao gồm : Camera trái phải , liDar , GPS,...... 
+-> Use to input for TrackGuard  , primarily use : tracking labels + frame index + object ground truth 
+Can use extra GPS -> Ego motion 
+Calibration -> Coordinate transform (Hiệu chỉnh Sensor)
+** At here : KITTI Annotation is not use to simulate raw camera detection . 
+It is ground truth (mốc , nhãn đúng để làm chuẩn đáh giá ) 
+In real enviroment , x = 20 but camera can measure x = 20.2 
+-> GT là đáp án chuẩn được con người annotation hoặc tạo 1 cách thật chính xác để làm mốc chuẩn , measurement là cái dữ liệu sensor nhìn thấy 
+
+- Firstly , Use annotation to build replay harness 
+- Secondly , Use ground truth to simulate camera data detection 
+- After that , Can generate camera data and radar data in real enviroment by add noise function to GT 
+
+Ex : 
+Ground truth: object thật ở x = 2.0 m, z = 30.0 m
+Camera measurement:  x = 2.2 m, z = 31.4 m
+Kalman track state:  x = 2.1 m, z = 30.6 m, vx = ...
+
+2. Format 1 line KITTI Tracking label 
+frame track_id type truncation occlusion alpha
+bbox_left bbox_top bbox_right bbox_bottom
+height width length
+location_x location_y location_z
+rotation_y
+
+Ex: 12 7 Car 0.00 0 0.15 500.0 150.0 620.0 300.0 1.50 1.80 4.00 2.10 1.60 30.00 -0.05 
+Frame : 12 
+Id_track : 7
+type : Car 
+truncation : 0.00
+occlusion : 0 
+alpha angle : 0.15
+bbox        = [500, 150, 620, 300] 
+dimensions  = h=1.50, w=1.80, l=4.00 m
+location    = [2.10, 1.60, 30.00] m
+rotation_y  = -0.05 rad
+
++ Frame is just number of frame , it not mean timestamp but when we simulate , we use 10HZ tracking 
+-> Can virtual send frame data every seconds follow 
+(Bản chất nó chỉ là từng frame được gửi tới , nhưng ta có thể simulate của nó theo frequent mình định nghĩa ) 
+
++ track_id is ground truth identity -> show what object through a lot of frames 
+It will verify the operation of tracker manager (tracker must create track_id ) 
+KITTI track_id → chỉ dùng làm ground truth/evaluation
+Tracker ID     → ID do TrackManager tự sinh 
+
++ bbox is 2D image in screen of camera  
+A bounding box 2D , what the object appear in the image 
+
++ Location is 3D location of object with Ox , Oy , Oz 
+Maybe O is camera 
+-> Transform to vehicle frame : Pvehicle = Pcamera->vehicleCamera 
+
++ rotation_y → orientation của object trong camera frame
++ alpha       → góc quan sát của object từ camera
++ truncation :  Độ cắt bởi ảnh của object 
++ occlusion : Mức độ bị che khuất (0 -> 3) 
+
+**Car and Pedestrian are classes to use common  !  
+
+3. Pipeline ADAS 
+
+Sensors 
+    ↓
+Time Sync / Timestamp Alignment (synchronization time for different frequent , timestamp alignment ) -> interpolation to common tick 
+    ↓
+Coordinate Transform / Ego-motion Compensation (Ego-motion (Vehicle itself) , transform to common vehicle frame )
+    ↓
+State Estimation: Kalman/EKF (Kalman Filter to make noise deduction ) 
+    ↓
+Data Association + Track Lifecycle (Assign data to right object, track_id number , use Hungarian algorithm to mapping object to track_id with minimum cost all , track lifecylce of object from tentative -> confirm -> occlusion -> lost data -> deleted)
+    ↓
+Multi-sensor Fusion (after collect , filter , calibration -> fusion data from multiple sensor -> aggregate information of object , don't choose early fuse cause it really hard , require AI deep , synchronization big issue , expand and error of sensors  ) 
+    ↓
+Threat Assessment: TTC / Path Prediction (Assess state : Time to collision) 
+    ↓
+Decision: FCW / AEB (System behavior ) 
+    ↓
+Warning or Actuation Command 
+
+4. Camera detection model 
+Camera show : 2D bounding box , object class , confidence 
+-> Really robust at : detect class , type of object , accuracy , shape , appearance , .... 
+Weak at : Distance , speed , inclement weather  
+(ước lượng từ nhiều detection -> dễ sai lệch ) 
+
+5.Radar detection model  
+Radar measure : 
+range
+azimuth
+range-rate 
+
+6. Camera and radar support mutual 
+Khía cạnh	                		Camera	                     Radar
+Class	               				Tốt	                    	Yếu hơn
+Boundingbox/image context	        Tốt							Không tự nhiên
+Range								Ước lượng, nhiễu hơn		Tốt
+Range-rate							Không đo trực tiếp			Đo trực tiếp bằng Doppler
+Azimuth								Tốt							Thấp hơn
+Hoạt động ban đêm					Kém hơn						Tốt hơn
+Lane/context						Tốt							Hạn chế
+
+7. Deterministic replay 
+Target : With same sequence  : 
++ Same frame order 
++ Same timestamp 
++ Same detection order 
++ Same output 
+
+Dataset + config + parser version 
+-> Reproducible output 
+
+8. TrackGuard scope:
+   - KITTI annotation dùng làm ground truth/replay source
+   - camera measurement sẽ được mô phỏng
+   - radar là synthetic sensor model
+   - replay phải deterministic
