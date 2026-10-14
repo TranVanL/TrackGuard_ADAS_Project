@@ -1,0 +1,20 @@
+project:
+  name: TrackGuard
+  version: 0.1.0
+
+replay:
+  frame_rate_hz: 10
+  deterministic: true
+
+randomness:
+  rng_seed: 20261014
+
+thresholds:
+  camera_confidence_min: 0.30
+  radar_range_min_m: 0.50
+  radar_range_max_m: 150.0
+
+build:
+  cxx_standard: 17
+  enable_visualization: false
+  enable_ros2_publisher: false

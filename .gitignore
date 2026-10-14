@@ -1,0 +1,8 @@
+build/
+build-*/
+data/kitti_subset/*
+!data/kitti_subset/.gitkeep
+compile_commands.json
+*.o
+*.a
+*.so
